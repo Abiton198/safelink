@@ -15,7 +15,7 @@
  * A scan alone reveals nothing personal.
  */
 import { useEffect, useState, type FormEvent } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import type { EmergencyData } from "../types";
@@ -310,6 +310,16 @@ export function ScanPage() {
             >
               Close emergency view
             </button>
+
+            {/* Owners: viewing needs only the date of birth, but EDITING needs
+                a real sign-in, because a date of birth is not a strong secret. */}
+            <p className="fine-print">
+              Are you the owner and want to change these details?{" "}
+              <Link className="inline-link" to="/auth">
+                Sign in with Google
+              </Link>
+              .
+            </p>
 
             <p className="fine-print">
               {data.emergency_number_note} This page contains private

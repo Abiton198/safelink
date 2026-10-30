@@ -1,152 +1,127 @@
 /**
  * pages/Landing.tsx
  * ---------------------------------------------------------------------------
- * The public home page (route: "/").
+ * The home page (route: "/"), built like an emergency screen:
+ * one fixed screen, no scrolling, two big buttons.
  *
- * Sections:
- *   1. Hero text + call-to-action buttons
- *   2. Decorative tag card with a DEMO QR code
- *   3. "How it works" – three feature cards and a legal disclaimer
+ *   1. SCAN TAG        -> opens the camera (ScanCamera). When a SafeLink QR
+ *                         code is read, the person goes to /scan/<token> and
+ *                         is asked only for the owner's date of birth.
+ *   2. SIGN IN GOOGLE  -> one tap, no password. New users get an account
+ *                         automatically. If already signed in, the button
+ *                         becomes "Open dashboard".
  *
- * The button changes depending on sign-in state:
- *   - signed in  -> "Open dashboard"
- *   - signed out -> "Get started" (goes to the sign-in / sign-up page)
+ * This page does not use <Shell> on purpose: no header or footer means
+ * nothing else on screen to distract or to scroll.
  */
-import { Link } from "react-router-dom";
-import { QRCodeCanvas } from "qrcode.react";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth";
-import { siteUrl } from "../config/site";
-import { Shell } from "../components/layout/Shell";
+import { messageOf } from "../utils/messageOf";
+import { Alert } from "../components/ui/Alert";
+import { ScanCamera } from "../components/scan/ScanCamera";
+
+/** Firebase codes that only mean "the person closed the Google popup". */
+const IGNORED_GOOGLE_ERRORS = [
+  "auth/popup-closed-by-user",
+  "auth/cancelled-popup-request",
+];
 
 export function Landing() {
-  const { user } = useAuth();
+  const { user, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
+
+  const [scanning, setScanning] = useState(false); // camera open?
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleGoogle() {
+    setError("");
+    setGoogleBusy(true);
+
+    try {
+      await signInWithGoogle();
+      navigate("/dashboard");
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (!code || !IGNORED_GOOGLE_ERRORS.includes(code)) {
+        setError(messageOf(err));
+      }
+    } finally {
+      setGoogleBusy(false);
+    }
+  }
 
   return (
-    <Shell>
-      <main className="landing">
-        {/* ---------- Hero text ---------- */}
-        <div className="hero-copy">
-          <div className="eyebrow">
-            <span className="pulse-dot" />
-            PERSONAL SAFETY & RECOVERY
-          </div>
+    <main className="emergency-home">
+      <div className="emergency-home-inner">
+        <div className="brand-mark">S</div>
+        <h1>SafeLink</h1>
+        <p className="emergency-home-sub">Scan a tag to get emergency help.</p>
 
-          <h1>
-            Help can start
-            <br />
-            <em>with one scan.</em>
-          </h1>
+        {/* ---------- Button 1: scan the tag ---------- */}
+        <button
+          type="button"
+          className="button primary emergency-button scan-button"
+          onClick={() => setScanning(true)}
+        >
+          <span aria-hidden="true">▦</span> Scan tag
+        </button>
 
-          <p className="hero-sub">
-            A simple QR tag that helps trusted responders reach the emergency
-            information you choose to share.
-          </p>
-
-          <div className="hero-actions">
-            <Link
-              className="button primary"
-              to={user ? "/dashboard" : "/auth"}
+        {/* ---------- Button 2: Google sign-in / dashboard ---------- */}
+        {user ? (
+          <Link
+            className="button secondary emergency-button"
+            to="/dashboard"
+          >
+            Open dashboard
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="button secondary emergency-button google-button"
+            onClick={() => void handleGoogle()}
+            disabled={googleBusy}
+          >
+            <svg
+              className="google-icon"
+              width="22"
+              height="22"
+              viewBox="0 0 48 48"
+              aria-hidden="true"
             >
-              {user ? "Open dashboard" : "Get started"} <span>→</span>
-            </Link>
-
-            {/* "#how-it-works" scrolls to the section further down this page */}
-            <a className="button secondary" href="#how-it-works">
-              How it works
-            </a>
-          </div>
-
-          <div className="trust-line">
-            <span>✓</span> You control your profile
-            <span>✓</span> Time-limited emergency access
-          </div>
-        </div>
-
-        {/* ---------- Decorative artwork ---------- */}
-        <div className="hero-art">
-          <div className="orbit orbit-one" />
-          <div className="orbit orbit-two" />
-
-          <div className="tag-card">
-            <div className="tag-header">
-              <span className="brand-mark">S</span>
-              <span>SAFELINK TAG</span>
-            </div>
-
-            {/* Demonstration only: this is NOT a real customer tag.
-                The token "demo-tag-token-not-active" is also blocked in ScanPage. */}
-            <div className="fake-qr">
-              <QRCodeCanvas
-                value={`${siteUrl}/scan/demo-tag-token-not-active`}
-                size={150}
-                bgColor="#ffffff"
-                fgColor="#102b36"
-                level="M"
+              <path
+                fill="#EA4335"
+                d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"
               />
-            </div>
+              <path
+                fill="#4285F4"
+                d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.2 5.5-4.7 7.2l7.6 5.9c4.4-4.1 6.9-10.1 6.9-17.6z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"
+              />
+              <path
+                fill="#34A853"
+                d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.8 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"
+              />
+            </svg>
+            {googleBusy ? "Opening Google…" : "Sign in with Google"}
+          </button>
+        )}
 
-            <div className="tag-bottom">
-              <strong>Scan for assistance</strong>
-              <span>Private · Secure · Ready</span>
-            </div>
-          </div>
+        {error && <Alert type="error">{error}</Alert>}
 
-          <div className="floating-note">
-            <span className="note-icon">✦</span>
-            <span>
-              <strong>Your info, your choice</strong>
-              <small>Share only what is needed</small>
-            </span>
-          </div>
-        </div>
+        <p className="emergency-home-note">
+          SafeLink does not dispatch responders. In immediate danger, contact
+          local emergency services.
+        </p>
+      </div>
 
-        {/* ---------- How it works ---------- */}
-        <section id="how-it-works" className="how-section">
-          <div className="section-heading">
-            <div className="eyebrow">BUILT FOR REAL LIFE</div>
-            <h2>
-              One small tag.
-              <br />A more prepared response.
-            </h2>
-          </div>
-
-          <div className="feature-grid">
-            <article className="feature-card">
-              <span className="feature-number">01</span>
-              <h3>Claim your tag</h3>
-              <p>
-                Use the tag reference and concealed activation code supplied
-                with your purchased SafeLink tag.
-              </p>
-            </article>
-
-            <article className="feature-card">
-              <span className="feature-number">02</span>
-              <h3>Create your profile</h3>
-              <p>
-                Add emergency contacts, important notes, and vehicle or
-                tracker details before subscribing.
-              </p>
-            </article>
-
-            <article className="feature-card">
-              <span className="feature-number">03</span>
-              <h3>Verify before sharing</h3>
-              <p>
-                A scan alone reveals no personal details. The backend checks
-                access conditions before releasing emergency information.
-              </p>
-            </article>
-          </div>
-
-          <p className="disclaimer">
-            SafeLink is an assistance and information tool, not an emergency
-            dispatch service or a replacement for police, medical services,
-            or a vehicle tracking provider.
-          </p>
-        </section>
-      </main>
-    </Shell>
+      {/* Camera sits on top of the page while scanning */}
+      {scanning && <ScanCamera onClose={() => setScanning(false)} />}
+    </main>
   );
 }
