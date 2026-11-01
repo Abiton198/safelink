@@ -26,6 +26,7 @@
  *   /                         Landing      public home page
  *   /auth                     AuthPage     sign in / create account
  *   /dashboard                Dashboard    owner area (sign-in required)
+ *   /onboarding               Onboarding   guided setup carousel (sign-in required)
  *   /scan/:token              ScanPage     public page opened by scanning a QR tag
  *   /subscription/return      ReturnPage   customer returns from PayFast
  *   /subscription/cancelled   ReturnPage   customer cancelled at PayFast
@@ -38,6 +39,7 @@ import { useAuth } from "./auth";
 import { Landing } from "./pages/Landing";
 import { AuthPage } from "./pages/AuthPage";
 import { Dashboard } from "./pages/Dashboard";
+import { Onboarding } from "./pages/Onboarding";
 import { ScanPage } from "./pages/ScanPage";
 import { ReturnPage } from "./pages/ReturnPage";
 import { NotFound } from "./pages/NotFound";
@@ -71,6 +73,12 @@ export default function App() {
       <Route
         path="/dashboard"
         element={user ? <Dashboard /> : <Navigate to="/auth" replace />}
+      />
+
+      {/* Guided setup: signed-in only */}
+      <Route
+        path="/onboarding"
+        element={user ? <Onboarding /> : <Navigate to="/auth" replace />}
       />
 
       {/* Public: opened when someone scans a QR tag */}

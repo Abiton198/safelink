@@ -1,0 +1,442 @@
+/* ==========================================================================
+   styles/onboarding.css
+   Colourful, mobile-first styles for the onboarding carousel.
+   Everything is prefixed "ob-" so it cannot clash with your other CSS.
+   Imported by pages/Onboarding.tsx.
+   ========================================================================== */
+
+/* ---------- Colour themes: one gradient per slide ---------- */
+.grad-welcome {
+    --grad: linear-gradient(160deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    --accent: #7c3aed;
+}
+
+.grad-profile {
+    --grad: linear-gradient(160deg, #0ea5e9 0%, #6366f1 100%);
+    --accent: #4f46e5;
+}
+
+.grad-contacts {
+    --grad: linear-gradient(160deg, #f97316 0%, #ec4899 100%);
+    --accent: #db2777;
+}
+
+.grad-vehicle {
+    --grad: linear-gradient(160deg, #10b981 0%, #0ea5e9 100%);
+    --accent: #0284c7;
+}
+
+.grad-tag {
+    --grad: linear-gradient(160deg, #8b5cf6 0%, #06b6d4 100%);
+    --accent: #7c3aed;
+}
+
+.grad-finish {
+    --grad: linear-gradient(160deg, #f43f5e 0%, #f59e0b 100%);
+    --accent: #e11d48;
+}
+
+/* ---------- Screen: top bar, scrolling stage, fixed bottom actions ---------- */
+.ob-screen {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--grad);
+    color: #fff;
+    font-family: inherit;
+}
+
+.ob-loading {
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.ob-spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, .35);
+    border-top-color: #fff;
+    animation: ob-spin 0.8s linear infinite;
+}
+
+@keyframes ob-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ---------- Top bar ---------- */
+.ob-top {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 8px;
+}
+
+.ob-exit {
+    background: rgba(255, 255, 255, .2);
+    color: #fff;
+    border: 0;
+    cursor: pointer;
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: .85rem;
+}
+
+.ob-count {
+    font-weight: 700;
+    font-size: .85rem;
+    opacity: .9;
+}
+
+.ob-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.ob-dot {
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .4);
+    transition: width .25s ease, background .25s ease;
+}
+
+.ob-dot.done {
+    background: rgba(255, 255, 255, .85);
+}
+
+.ob-dot.active {
+    width: 28px;
+    background: #fff;
+}
+
+/* ---------- Stage (scrolls if the form is tall) ---------- */
+.ob-stage {
+    flex: 1;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 8px 16px 24px;
+}
+
+.ob-slide {
+    animation: ob-in-forward .35s ease both;
+}
+
+.ob-slide.back {
+    animation-name: ob-in-back;
+}
+
+@keyframes ob-in-forward {
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes ob-in-back {
+    from {
+        opacity: 0;
+        transform: translateX(-40px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.ob-slide-head {
+    text-align: center;
+    padding: 8px 8px 20px;
+}
+
+.ob-emoji {
+    display: block;
+    font-size: 3rem;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.ob-slide-head h1 {
+    margin: 0 0 6px;
+    font-size: 1.7rem;
+    line-height: 1.15;
+}
+
+.ob-slide-head p {
+    margin: 0;
+    opacity: .92;
+    font-size: 1rem;
+}
+
+/* ---------- White card holding the form ---------- */
+.ob-card {
+    background: #fff;
+    color: #0f172a;
+    border-radius: 28px;
+    padding: 22px 20px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, .25);
+}
+
+/* Form controls: 16px text stops iOS from zooming in; big touch targets */
+.ob-card .field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 14px;
+    font-weight: 600;
+    font-size: .9rem;
+}
+
+.ob-card input[type="text"],
+.ob-card input[type="tel"],
+.ob-card input[type="date"],
+.ob-card input:not([type]),
+.ob-card input[type="email"],
+.ob-card select,
+.ob-card textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 400;
+    padding: 14px;
+    min-height: 50px;
+    border-radius: 14px;
+    border: 1.5px solid #e2e8f0;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.ob-card input:focus,
+.ob-card select:focus,
+.ob-card textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.ob-card .alert {
+    margin-bottom: 14px;
+}
+
+.ob-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 380px) {
+    .ob-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+}
+
+.ob-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 16px;
+    font-size: .95rem;
+}
+
+.ob-check input {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--accent);
+}
+
+/* ---------- Lists, chips, hints ---------- */
+.ob-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+}
+
+.ob-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 16px;
+    background: #f1f5f9;
+}
+
+.ob-list li>span:nth-child(2) {
+    flex: 1;
+    display: grid;
+}
+
+.ob-list small,
+.ob-chip small {
+    color: #64748b;
+    font-weight: 400;
+}
+
+.ob-list-icon {
+    font-size: 1.6rem;
+}
+
+.ob-chips {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.ob-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: #f1f5f9;
+    border-left: 5px solid var(--accent);
+}
+
+.ob-chip>span {
+    display: grid;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.ob-chip button {
+    background: #fff;
+    border: 0;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    color: #475569;
+    flex-shrink: 0;
+}
+
+.ob-hint {
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #fef9c3;
+    color: #713f12;
+    font-size: .9rem;
+}
+
+.ob-link {
+    background: none;
+    border: 0;
+    color: var(--accent);
+    font-weight: 700;
+    cursor: pointer;
+    padding: 8px;
+}
+
+.ob-plan {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 18px;
+    color: #fff;
+    background: var(--grad);
+}
+
+.ob-plan div {
+    display: grid;
+}
+
+.ob-plan small {
+    opacity: .9;
+}
+
+/* ---------- Buttons ---------- */
+.ob-btn {
+    min-height: 52px;
+    padding: 0 20px;
+    border-radius: 16px;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    width: 100%;
+}
+
+.ob-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.ob-btn.primary {
+    background: #fff;
+    color: var(--accent);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .18);
+}
+
+.ob-btn.ghost {
+    background: rgba(255, 255, 255, .18);
+    color: #fff;
+}
+
+.ob-btn.accent {
+    background: var(--grad);
+    color: #fff;
+}
+
+/* ---------- Bottom actions: stay reachable by the thumb ---------- */
+.ob-actions {
+    position: sticky;
+    bottom: 0;
+    display: grid;
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(15, 23, 42, .28), transparent);
+    backdrop-filter: blur(4px);
+}
+
+.ob-actions>* {
+    max-width: 520px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.ob-actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.ob-actions-row>span {
+    display: block;
+}
+
+/* ---------- Respect "reduce motion" settings ---------- */
+@media (prefers-reduced-motion: reduce) {
+
+    .ob-slide,
+    .ob-spinner {
+        animation: none;
+    }
+
+    .ob-dot {
+        transition: none;
+    }
+}

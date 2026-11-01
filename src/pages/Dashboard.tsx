@@ -13,6 +13,7 @@
  * receive data and callbacks from here as props, so they stay simple.
  */
 import { useEffect, useState, type FormEvent } from "react";
+import { Link, Navigate } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import { api, apiBaseUrl } from "../api";
@@ -25,6 +26,10 @@ import type {
 } from "../types";
 
 import { messageOf } from "../utils/messageOf";
+import {
+  hasStartedOnboarding,
+  isOnboardingDone,
+} from "../lib/onboardingProgress";
 import { Shell } from "../components/layout/Shell";
 import { Alert } from "../components/ui/Alert";
 
@@ -468,6 +473,17 @@ export function Dashboard() {
     );
   }
 
+  // First visit with nothing set up yet: send the person to the guided setup.
+  // (Once they have opened it, they are never redirected again.)
+  if (
+    user &&
+    !hasStartedOnboarding(user.uid) &&
+    !contacts.length &&
+    !tags.length
+  ) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
   // Does the subscription status allow emergency access?
   const active = !!sub && ACTIVE_STATUSES.includes(sub.status);
 
@@ -496,6 +512,16 @@ export function Dashboard() {
         {/* ---------- Messages ---------- */}
         {error && <Alert type="error">{error}</Alert>}
         {notice && <Alert type="success">{notice}</Alert>}
+
+        {/* Resume banner: shown until the guided setup is finished */}
+        {user && !isOnboardingDone(user.uid) && (
+          <Alert type="info">
+            Finish setting up SafeLink.{" "}
+            <Link className="inline-link" to="/onboarding">
+              Continue guided setup →
+            </Link>
+          </Alert>
+        )}
 
         {!user?.emailVerified && (
           <Alert type="info">
