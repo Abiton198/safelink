@@ -9,7 +9,7 @@
  */
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import type { Vehicle } from "../../types";
-import type { VehicleForm } from "./components/dashboard/dashboardConfig";
+import type { VehicleForm } from "./dashboardConfig";
 import { Card } from "../ui/Card";
 import { Field } from "../ui/Field";
 import { Empty } from "../ui/Empty";
