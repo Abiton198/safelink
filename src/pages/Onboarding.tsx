@@ -13,15 +13,16 @@
  *   - "Save & exit" leaves for the dashboard. The slide they were on is
  *     remembered (lib/onboardingProgress.ts), so they RESUME where they
  *     stopped next time. The dashboard shows a "Continue setup" banner.
- *   - The last slide finishes with the subscription (PayFast checkout), or
- *     "Save & finish later".
+ *   - The last slide finishes by adding a card (PayFast, R0.00 today) to
+ *     start the free trial, or "Save & finish later". Onboarding counts as
+ *     COMPLETE only once the backend confirms the card.
  *
  * This page only handles navigation and layout:
  *   data + API calls -> hooks/useOnboarding.ts
  *   the slides       -> components/onboarding/Step*.tsx
  *   the colours      -> styles/onboarding.css
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/onboarding.css";
@@ -33,6 +34,7 @@ import {
     saveProgress,
     type OnboardingProgress,
 } from "../lib/onboardingProgress";
+import { fetchRemoteProgress, saveRemoteProgress } from "../lib/onboardingApi";
 import { Alert } from "../components/ui/Alert";
 import {
     STEPS,
@@ -70,6 +72,63 @@ export function Onboarding() {
             return next;
         });
     }
+
+    /* ---------- Sync with the backend (resume on any device) ---------- */
+
+    // Has the saved backend copy been checked yet?
+    const [hydrated, setHydrated] = useState(false);
+
+    // 1) Once, after the first load: if this device is "fresh" (nothing saved
+    //    locally) but the backend has progress, continue from the backend's.
+    useEffect(() => {
+        if (ob.loading || hydrated || !user) return;
+
+        let cancelled = false;
+
+        void fetchRemoteProgress(user).then((remote) => {
+            if (cancelled) return;
+
+            if (remote) {
+                setProgress((local) => {
+                    const freshDevice =
+                        local.step === 0 &&
+                        local.saved.length === 0 &&
+                        local.skipped.length === 0;
+
+                    if (!freshDevice) return local; // this device already has progress
+
+                    const merged = { ...remote, started: true };
+                    if (uid) saveProgress(uid, merged);
+                    return merged;
+                });
+            }
+
+            setHydrated(true);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [ob.loading, hydrated, user, uid]);
+
+    // 2) Whenever progress changes, save it to the backend (after a short
+    //    pause so quick taps are sent as one request).
+    useEffect(() => {
+        if (!user || !hydrated) return;
+
+        const timer = setTimeout(() => {
+            void saveRemoteProgress(user, progress);
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [progress, user, hydrated]);
+
+    // If the backend already shows a trial or active subscription (for example
+    // the person closed the tab right after PayFast), onboarding is complete.
+    useEffect(() => {
+        if (!ob.loading && ob.activeSub && !progress.done) update({ done: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ob.loading, ob.activeSub, progress.done]);
 
     const step = Math.min(Math.max(progress.step, 0), STEPS.length - 1);
     const current = STEPS[step];
@@ -109,7 +168,16 @@ export function Onboarding() {
         navigate("/dashboard");
     }
 
-    /** Last slide: go to PayFast, or straight to the dashboard if subscribed. */
+    /**
+     * Last slide ONLY: this is the one place PayFast is opened.
+     * Every earlier slide just saves or skips.
+     *
+     * Onboarding is NOT marked complete here. It completes only when the
+     * backend confirms the card (the ITN starts the trial). The return page
+     * (pages/ReturnPage.tsx) checks that and then marks it done.
+     *
+     * If the person already has a trial or subscription, no gateway is needed.
+     */
     async function subscribe() {
         if (ob.activeSub) {
             update({ done: true });
@@ -117,9 +185,7 @@ export function Onboarding() {
             return;
         }
 
-        update({ done: true });
-        const started = await ob.beginCheckout();
-        if (!started) update({ done: false }); // checkout failed: keep the banner
+        await ob.beginCheckout(); // opens PayFast; shows an error here if it can't
     }
 
     /* ---------- Rendering ---------- */
@@ -163,7 +229,7 @@ export function Onboarding() {
     const primaryLabel = isFinish
         ? ob.activeSub
             ? "Go to dashboard →"
-            : "Subscribe now →"
+            : "Add card & start free trial →"
         : current.id === "welcome"
             ? "Let's start →"
             : current.id === "profile"

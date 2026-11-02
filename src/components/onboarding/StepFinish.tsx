@@ -60,22 +60,29 @@ export function StepFinish({ ob, progress, onGoTo }: Props) {
 
             <div className="ob-plan">
                 <div>
-                    <small>SafeLink monthly</small>
-                    <strong>R19.99 / month</strong>
+                    <small>Today</small>
+                    <strong>R0.00</strong>
                 </div>
                 <div>
-                    <small>Trial</small>
-                    <strong>7 days (configured)</strong>
+                    <small>After the 7-day trial</small>
+                    <strong>R19.99 / month</strong>
                 </div>
             </div>
 
             {ob.activeSub ? (
-                <p className="ob-hint">✅ Your subscription is active. You're all set.</p>
+                <p className="ob-hint">
+                    ✅ {ob.sub?.status === "trialing"
+                        ? "Your free trial is active."
+                        : "Your subscription is active."}{" "}
+                    You're all set.
+                </p>
             ) : (
                 <p className="ob-hint">
-                    Subscribing activates emergency access. Not ready? Choose{" "}
+                    💳 Add your card to start your free trial. <strong>Nothing is
+                        charged today.</strong> You enter your card securely on PayFast;
+                    SafeLink never sees your card number. Not ready? Choose{" "}
                     <strong>Save &amp; finish later</strong>. Everything you added is
-                    kept and you can subscribe from your dashboard.
+                    kept, and setup is complete once your card is added.
                 </p>
             )}
         </>

@@ -64,7 +64,7 @@ export const STEPS: StepConfig[] = [
         id: "finish",
         icon: "🚀",
         title: "Almost there",
-        subtitle: "Review your setup and activate emergency access.",
+        subtitle: "Review your setup, then add your card to start your free trial.",
         skippable: false,
     },
 ];
