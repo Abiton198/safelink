@@ -20,6 +20,8 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import type { EmergencyData } from "../types";
 import { messageOf } from "../utils/messageOf";
+import { scanPhotosOf } from "../lib/vehicleImages";
+import "../styles/scan.css";
 import { Shell } from "../components/layout/Shell";
 import { Field } from "../components/ui/Field";
 import { Alert } from "../components/ui/Alert";
@@ -291,6 +293,26 @@ export function ScanPage() {
                     )}
 
                     {vehicle.notes && <p>{vehicle.notes}</p>}
+
+                    {/* Photos: tap one to open it full size in a new tab */}
+                    {scanPhotosOf(vehicle).length > 0 && (
+                      <div className="scan-photos">
+                        {scanPhotosOf(vehicle).map((url, photoIndex) => (
+                          <a
+                            key={photoIndex}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <img
+                              src={url}
+                              alt={`${vehicle.label} photo ${photoIndex + 1}`}
+                              loading="lazy"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (

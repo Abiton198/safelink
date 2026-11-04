@@ -9,8 +9,10 @@
  *   profile     PUT  /api/v1/profile/me
  *   contacts    POST /api/v1/profile/me/contacts   (+ DELETE .../:id)
  *   vehicles    POST /api/v1/profile/me/vehicles   (+ DELETE .../:id)
+ *   photos      POST /api/v1/profile/me/vehicles/:id/images (max 5)  (+ DELETE .../:imageId)
  *   claim tag   POST /api/v1/qr-tags/claim
- *   checkout    POST /api/v1/payments/payfast/checkout
+ *   checkout    POST /api/v1/payments/payfast/checkout          (card + free trial)
+ *   prepaid     POST /api/v1/payments/payfast/checkout-prepaid  (any method, no trial)
  *
  * Because every "Save" goes straight to the backend, the person can leave at
  * any time and nothing they saved is lost.
@@ -21,6 +23,8 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Contact, Profile, QRTag, Subscription, Vehicle } from "../types";
 import { messageOf } from "../utils/messageOf";
+import { resizeImage } from "../utils/resizeImage";
+import { uploadFile } from "../lib/uploadApi";
 import {
     ACTIVE_STATUSES,
     type ClaimForm,
@@ -146,14 +150,79 @@ export function useOnboarding() {
             api(user!, `/api/v1/profile/me/contacts/${id}`, { method: "DELETE" })
         );
 
-    const addVehicle = (form: VehicleForm) =>
+    /** Saves a vehicle. Returns its new id (so photos can be attached), or null. */
+    async function addVehicle(form: VehicleForm): Promise<string | null> {
+        let vehicleId: string | null = null;
+
+        const saved = await run(async () => {
+            const created = await api<{ vehicle_id: string }>(
+                user!,
+                "/api/v1/profile/me/vehicles",
+                { method: "POST", body: JSON.stringify(form) }
+            );
+            vehicleId = created.vehicle_id;
+        }, "Vehicle added.");
+
+        return saved ? vehicleId : null;
+    }
+
+    /**
+     * Uploads photos to a vehicle one at a time (kinder to mobile data than all
+     * at once). Each photo is shrunk in the browser first. The server enforces
+     * the maximum of 5 per vehicle.
+     */
+    async function uploadVehicleImages(
+        vehicleId: string,
+        files: File[]
+    ): Promise<number> {
+        if (!user || files.length === 0) return 0;
+
+        setBusy(true);
+        setError("");
+        setNotice("");
+
+        let uploaded = 0;
+        let lastProblem = "";
+
+        for (const file of files) {
+            try {
+                const small = await resizeImage(file);
+                await uploadFile(
+                    user,
+                    `/api/v1/profile/me/vehicles/${vehicleId}/images`,
+                    small
+                );
+                uploaded += 1;
+            } catch (err) {
+                lastProblem = messageOf(err);
+            }
+        }
+
+        await load(false);
+        setBusy(false);
+
+        if (lastProblem) {
+            setError(
+                uploaded > 0
+                    ? `${uploaded} of ${files.length} photos were added. ${lastProblem}`
+                    : lastProblem
+            );
+        } else {
+            setNotice(uploaded === 1 ? "Photo added." : `${uploaded} photos added.`);
+        }
+
+        return uploaded;
+    }
+
+    const deleteVehicleImage = (vehicleId: string, imageId: string) =>
         run(
             () =>
-                api(user!, "/api/v1/profile/me/vehicles", {
-                    method: "POST",
-                    body: JSON.stringify(form),
-                }),
-            "Vehicle added."
+                api(
+                    user!,
+                    `/api/v1/profile/me/vehicles/${vehicleId}/images/${imageId}`,
+                    { method: "DELETE" }
+                ),
+            "Photo removed."
         );
 
     const deleteVehicle = (id: string) =>
@@ -175,12 +244,30 @@ export function useOnboarding() {
             "Tag claimed."
         );
 
+    /** Posts signed fields to PayFast with a hidden form (the browser leaves this page). */
+    function submitToPayFast(processUrl: string, fields: Record<string, string>) {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = processUrl;
+
+        for (const [key, value] of Object.entries(fields)) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+
     /**
-     * Starts PayFast checkout: asks the backend for the signed fields, then
-     * posts them to PayFast with a hidden form (the browser leaves this page).
-     * Returns false if it could not start.
+     * Asks the backend for signed PayFast fields at `path`, then opens PayFast.
+     * Returns false (and sets `error`) if it could not start.
+     * Prices are never decided here: the backend signs the amount.
      */
-    async function beginCheckout(): Promise<boolean> {
+    async function startPayFast(path: string, body: object): Promise<boolean> {
         if (!user) return false;
 
         setError("");
@@ -197,35 +284,31 @@ export function useOnboarding() {
             const result = await api<{
                 process_url: string;
                 fields: Record<string, string>;
-            }>(user, "/api/v1/payments/payfast/checkout", {
-                method: "POST",
-                body: JSON.stringify({
-                    plan_id: "safelink_monthly",
-                    accepted_recurring_terms: true,
-                    terms_version: "safelink-recurring-v1",
-                }),
-            });
+            }>(user, path, { method: "POST", body: JSON.stringify(body) });
 
-            const form = document.createElement("form");
-            form.method = "POST";
-            form.action = result.process_url;
-
-            for (const [key, value] of Object.entries(result.fields)) {
-                const input = document.createElement("input");
-                input.type = "hidden";
-                input.name = key;
-                input.value = value;
-                form.appendChild(input);
-            }
-
-            document.body.appendChild(form);
-            form.submit();
+            submitToPayFast(result.process_url, result.fields);
             return true;
         } catch (err) {
             setError(messageOf(err));
             return false;
         }
     }
+
+    /** Card + free trial (automatic monthly billing, card only). */
+    const beginCheckout = () =>
+        startPayFast("/api/v1/payments/payfast/checkout", {
+            plan_id: "safelink_monthly",
+            accepted_recurring_terms: true,
+            terms_version: "safelink-recurring-v1",
+        });
+
+    /** No card: prepay 1, 3 or 12 months with any method PayFast offers. */
+    const beginPrepaidCheckout = (months: 1 | 3 | 12) =>
+        startPayFast("/api/v1/payments/payfast/checkout-prepaid", {
+            months,
+            accepted_terms: true,
+            terms_version: "safelink-prepaid-v1",
+        });
 
     return {
         // data
@@ -249,9 +332,12 @@ export function useOnboarding() {
         addContact,
         deleteContact,
         addVehicle,
+        uploadVehicleImages,
+        deleteVehicleImage,
         deleteVehicle,
         claimTag,
         beginCheckout,
+        beginPrepaidCheckout,
     };
 }
 
