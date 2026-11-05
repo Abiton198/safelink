@@ -1,0 +1,20 @@
+/* Vehicle photos on the public scan page (pages/ScanPage.tsx) */
+.scan-photos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.scan-photos a {
+    display: block;
+}
+
+.scan-photos img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 12px;
+    background: #e2e8f0;
+    display: block;
+}

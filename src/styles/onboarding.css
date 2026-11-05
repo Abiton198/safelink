@@ -1,3 +1,4 @@
+@import "./vehicle-photos.css";
 /* ==========================================================================
    styles/onboarding.css
    Colourful, mobile-first styles for the onboarding carousel.
@@ -479,7 +480,7 @@
     }
 }
 
-/* ---------- Vehicle photos ---------- */
+/* ---------- Vehicle form bits (the photo tiles are in vehicle-photos.css) ---------- */
 .ob-chip-col {
     display: grid;
     gap: 10px;
@@ -508,106 +509,4 @@
     margin: 8px 0 0;
     font-size: .85rem;
     color: #b45309;
-}
-
-.ob-photos {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 14px;
-}
-
-.ob-photo {
-    position: relative;
-    width: 72px;
-    height: 72px;
-    border-radius: 14px;
-    overflow: hidden;
-    background: #e2e8f0;
-    display: grid;
-    place-items: center;
-}
-
-.ob-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
-.ob-photo button {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: .75rem;
-    background: rgba(15, 23, 42, .75);
-    color: #fff;
-}
-
-.ob-photo-add {
-    width: 72px;
-    height: 72px;
-    border-radius: 14px;
-    cursor: pointer;
-    position: relative;
-    border: 2px dashed #cbd5e1;
-    background: #f8fafc;
-    color: #475569;
-    display: grid;
-    place-items: center;
-    align-content: center;
-    gap: 2px;
-    text-align: center;
-}
-
-.ob-photo-add span {
-    font-size: 1.3rem;
-    line-height: 1;
-}
-
-.ob-photo-add small {
-    font-size: .7rem;
-}
-
-.ob-photo-add.disabled {
-    opacity: .5;
-    cursor: default;
-}
-
-/* The real file input is invisible but still covers the tile, so a tap opens the picker. */
-.ob-photo-add input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
-    font-size: 0;
-}
-
-/* Vehicle photos on the public scan page (pages/ScanPage.tsx) */
-.scan-photos {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.scan-photos a {
-    display: block;
-}
-
-.scan-photos img {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
-    border-radius: 12px;
-    background: #e2e8f0;
-    display: block;
 }

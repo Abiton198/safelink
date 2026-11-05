@@ -1,0 +1,98 @@
+/* ==========================================================================
+   styles/vehicle-photos.css
+   Photo tiles for vehicles. Shared by the onboarding wizard and the
+   dashboard (imported by components/vehicles/*.tsx).
+   ========================================================================== */
+.ob-photos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.ob-photo {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #e2e8f0;
+    display: grid;
+    place-items: center;
+}
+
+.ob-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.ob-photo button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: .75rem;
+    background: rgba(15, 23, 42, .75);
+    color: #fff;
+}
+
+.ob-photo-add {
+    width: 72px;
+    height: 72px;
+    border-radius: 14px;
+    cursor: pointer;
+    position: relative;
+    border: 2px dashed #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 2px;
+    text-align: center;
+}
+
+.ob-photo-add span {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.ob-photo-add small {
+    font-size: .7rem;
+}
+
+.ob-photo-add.disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+/* The real file input is invisible but covers the tile, so a tap opens the picker. */
+.ob-photo-add input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    font-size: 0;
+}
+
+.vp-label {
+    display: block;
+    font-weight: 600;
+    font-size: .9rem;
+    margin: 4px 0 8px;
+}
+
+.vp-note {
+    margin: 0 0 12px;
+    font-size: .85rem;
+    color: #b45309;
+}

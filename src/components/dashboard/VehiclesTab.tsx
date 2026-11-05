@@ -2,25 +2,35 @@
  * components/dashboard/VehiclesTab.tsx
  * ---------------------------------------------------------------------------
  * Two cards:
- *   1. A form to add a vehicle and its tracker details
- *   2. The list of saved vehicles, each with a Delete button
+ *   1. A form to add a vehicle, its tracker details and up to 5 photos
+ *   2. The list of saved vehicles, each with its photos (add / remove) and a
+ *      Delete button
  *
- * Saving/deleting logic lives in Dashboard.tsx.
+ * Saving, uploading and deleting logic lives in Dashboard.tsx.
+ * Photos are limited to 5 per vehicle (the backend enforces this too).
  */
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import type { Vehicle } from "../../types";
 import type { VehicleForm } from "./dashboardConfig";
+import { MAX_VEHICLE_IMAGES } from "../../lib/vehicleImages";
 import { Card } from "../ui/Card";
 import { Field } from "../ui/Field";
 import { Empty } from "../ui/Empty";
+import { PhotoPicker } from "../vehicles/PhotoPicker";
+import { VehiclePhotoStrip } from "../vehicles/VehiclePhotoStrip";
 
 type VehiclesTabProps = {
   vehicles: Vehicle[];
   form: VehicleForm;
   setForm: Dispatch<SetStateAction<VehicleForm>>;
   busy: boolean;
-  onAdd: (e: FormEvent) => void;
+  /** Saves the vehicle, then uploads `photos` to it. Resolves true if saved. */
+  onAdd: (e: FormEvent, photos: File[]) => Promise<boolean>;
   onDelete: (id: string) => void;
+  /** Adds photos to a vehicle that is already saved. */
+  onUploadImages: (vehicleId: string, files: File[]) => Promise<void>;
+  /** Removes one photo from a saved vehicle. */
+  onDeleteImage: (vehicleId: string, imageId: string) => void;
 };
 
 export function VehiclesTab({
@@ -30,7 +40,17 @@ export function VehiclesTab({
   busy,
   onAdd,
   onDelete,
+  onUploadImages,
+  onDeleteImage,
 }: VehiclesTabProps) {
+  // Photos chosen for the vehicle being added (uploaded after it is saved)
+  const [photos, setPhotos] = useState<File[]>([]);
+
+  async function submit(e: FormEvent) {
+    const saved = await onAdd(e, photos);
+    if (saved) setPhotos([]);
+  }
+
   return (
     <>
       {/* ---------- Add vehicle ---------- */}
@@ -38,7 +58,7 @@ export function VehiclesTab({
         title="Vehicles & trackers"
         subtitle="Add information that may help with vehicle recovery."
       >
-        <form onSubmit={onAdd} className="form-grid">
+        <form onSubmit={submit} className="form-grid">
           <Field label="Label">
             <input
               required
@@ -112,9 +132,17 @@ export function VehiclesTab({
             />
           </Field>
 
+          {/* Photos: full width, whatever the form grid looks like */}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <span className="vp-label">
+              Photos (optional, up to {MAX_VEHICLE_IMAGES})
+            </span>
+            <PhotoPicker files={photos} onChange={setPhotos} disabled={busy} />
+          </div>
+
           <div className="form-actions">
             <button className="button primary" disabled={busy}>
-              Add vehicle
+              {busy && photos.length > 0 ? "Saving and uploading…" : "Add vehicle"}
             </button>
           </div>
         </form>
@@ -141,6 +169,17 @@ export function VehiclesTab({
                       ? ` · ${vehicle.tracker_provider}`
                       : ""}
                   </small>
+
+                  <VehiclePhotoStrip
+                    vehicle={vehicle}
+                    busy={busy}
+                    onUpload={(files) =>
+                      onUploadImages(vehicle.vehicle_id, files)
+                    }
+                    onDelete={(imageId) =>
+                      onDeleteImage(vehicle.vehicle_id, imageId)
+                    }
+                  />
                 </div>
 
                 <button

@@ -26,6 +26,8 @@ import type {
 } from "../types";
 
 import { messageOf } from "../utils/messageOf";
+import { resizeImage } from "../utils/resizeImage";
+import { uploadFile } from "../lib/uploadApi";
 import {
   hasStartedOnboarding,
   isOnboardingDone,
@@ -340,27 +342,112 @@ export function Dashboard() {
   /* Actions: vehicles                                                  */
   /* ------------------------------------------------------------------ */
 
-  async function addVehicle(e: FormEvent) {
+  /**
+   * Uploads photos to a saved vehicle, one at a time (kinder to mobile data).
+   * Each photo is shrunk in the browser first; the server enforces the limit
+   * of 5 per vehicle. Returns how many worked and the last problem, if any.
+   */
+  async function sendPhotos(vehicleId: string, files: File[]) {
+    let uploaded = 0;
+    let problem = "";
+
+    for (const file of files) {
+      try {
+        const small = await resizeImage(file);
+        await uploadFile(
+          user!,
+          `/api/v1/profile/me/vehicles/${vehicleId}/images`,
+          small
+        );
+        uploaded += 1;
+      } catch (err) {
+        problem = messageOf(err);
+      }
+    }
+
+    return { uploaded, problem };
+  }
+
+  /** Words for the message shown after a photo upload. */
+  function photoMessage(uploaded: number, total: number, problem: string) {
+    if (!problem) {
+      return { notice: uploaded === 1 ? "Photo added." : `${uploaded} photos added.`, error: "" };
+    }
+    return {
+      notice: "",
+      error: uploaded > 0 ? `${uploaded} of ${total} photos were added. ${problem}` : problem,
+    };
+  }
+
+  /** Saves a vehicle, then its photos. Returns true if the vehicle was saved. */
+  async function addVehicle(e: FormEvent, photos: File[]): Promise<boolean> {
     e.preventDefault();
-    if (!user) return;
+    if (!user) return false;
 
     setBusy(true);
     setError("");
     setNotice("");
 
     try {
-      await api(user, "/api/v1/profile/me/vehicles", {
-        method: "POST",
-        body: JSON.stringify(vehicleForm),
-      });
+      const created = await api<{ vehicle_id: string }>(
+        user,
+        "/api/v1/profile/me/vehicles",
+        { method: "POST", body: JSON.stringify(vehicleForm) }
+      );
 
       setVehicleForm(EMPTY_VEHICLE_FORM);
-      setNotice("Vehicle details added.");
+
+      let message = { notice: "Vehicle details added.", error: "" };
+      if (photos.length > 0) {
+        const { uploaded, problem } = await sendPhotos(created.vehicle_id, photos);
+        message = photoMessage(uploaded, photos.length, problem);
+        if (!problem) message.notice = "Vehicle added with photos.";
+      }
+
+      // loadAll clears the error, so reload FIRST and set the messages after.
+      await loadAll();
+      setNotice(message.notice);
+      setError(message.error);
+      return true;
+    } catch (err) {
+      setError(messageOf(err));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Adds photos to a vehicle that is already saved. */
+  async function uploadVehicleImages(vehicleId: string, files: File[]) {
+    if (!user || files.length === 0) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    const { uploaded, problem } = await sendPhotos(vehicleId, files);
+    const message = photoMessage(uploaded, files.length, problem);
+
+    await loadAll();
+    setNotice(message.notice);
+    setError(message.error);
+    setBusy(false);
+  }
+
+  async function deleteVehicleImage(vehicleId: string, imageId: string) {
+    if (!user || !confirm("Remove this photo?")) return;
+
+    setError("");
+
+    try {
+      await api(
+        user,
+        `/api/v1/profile/me/vehicles/${vehicleId}/images/${imageId}`,
+        { method: "DELETE" }
+      );
       await loadAll();
     } catch (err) {
       setError(messageOf(err));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -602,6 +689,10 @@ export function Dashboard() {
                 busy={busy}
                 onAdd={addVehicle}
                 onDelete={(id) => void deleteVehicle(id)}
+                onUploadImages={uploadVehicleImages}
+                onDeleteImage={(vehicleId, imageId) =>
+                  void deleteVehicleImage(vehicleId, imageId)
+                }
               />
             )}
 
