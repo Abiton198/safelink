@@ -14,6 +14,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "../../auth";
 import type { OnboardingApi } from "../../hooks/useOnboarding";
 import { Field } from "../ui/Field";
+import DateOfBirthInput from "./DateOfBirthInput";
 
 type Props = {
     ob: OnboardingApi;
@@ -54,11 +55,10 @@ export function StepProfile({ ob, onSaved }: Props) {
             </Field>
 
             <Field label="Date of birth (used to verify scans)">
-                <input
-                    type="date"
+                <DateOfBirthInput
                     required
                     value={values.date_of_birth}
-                    onChange={(e) => set("date_of_birth", e.target.value)}
+                    onChange={(iso) => set("date_of_birth", iso)}
                 />
             </Field>
 
