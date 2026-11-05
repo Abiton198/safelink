@@ -155,6 +155,16 @@ export function ScanPage() {
               </Alert>
             )}
 
+            {/* An unclaimed tag: let its owner claim it right here */}
+            {tagState === "not_activated" && token && token !== DEMO_TOKEN && (
+              <Link
+                className="button secondary full"
+                to={`/claim/${encodeURIComponent(token)}`}
+              >
+                🏷️ This is my tag: claim it
+              </Link>
+            )}
+
             <p className="muted">
               A scan alone does not display personal information. If the tag
               is active, enter the owner's date of birth to request access to

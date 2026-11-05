@@ -28,6 +28,13 @@ import jsQR from "jsqr";
 type ScanCameraProps = {
     /** Called when the person presses "Close". */
     onClose: () => void;
+    /**
+     * Called with the tag token when a SafeLink code is read. If this is not
+     * given, the camera opens the public scan page (/scan/<token>) instead,
+     * which is what the home page wants. The claim flow passes it so it can look
+     * the tag up without leaving the page.
+     */
+    onToken?: (token: string) => void;
 };
 
 /** Pulls the tag token out of "https://site/scan/<token>", or returns null. */
@@ -41,7 +48,7 @@ function extractToken(text: string): string | null {
     }
 }
 
-export function ScanCamera({ onClose }: ScanCameraProps) {
+export function ScanCamera({ onClose, onToken }: ScanCameraProps) {
     const navigate = useNavigate();
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -78,7 +85,8 @@ export function ScanCamera({ onClose }: ScanCameraProps) {
 
                         if (token) {
                             stopped = true;
-                            navigate(`/scan/${encodeURIComponent(token)}`);
+                            if (onToken) onToken(token);
+                            else navigate(`/scan/${encodeURIComponent(token)}`);
                             return;
                         }
 
@@ -130,7 +138,7 @@ export function ScanCamera({ onClose }: ScanCameraProps) {
             cancelAnimationFrame(frameId);
             stream?.getTracks().forEach((track) => track.stop());
         };
-    }, [navigate]);
+    }, [navigate, onToken]);
 
     return (
         <div className="scan-camera" role="dialog" aria-label="Scan SafeLink tag">

@@ -28,6 +28,7 @@
  *   /dashboard                Dashboard    owner area (sign-in required)
  *   /onboarding               Onboarding   guided setup carousel (sign-in required)
  *   /scan/:token              ScanPage     public page opened by scanning a QR tag
+ *   /claim/:token             ClaimTag     claim an unclaimed tag you just scanned
  *   /subscription/return      ReturnPage   customer returns from PayFast
  *   /subscription/cancelled   ReturnPage   customer cancelled at PayFast
  *   *                         NotFound     anything else
@@ -41,6 +42,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { Dashboard } from "./pages/Dashboard";
 import { Onboarding } from "./pages/Onboarding";
 import { ScanPage } from "./pages/ScanPage";
+import { ClaimTag } from "./pages/ClaimTag";
 import { ReturnPage } from "./pages/ReturnPage";
 import { NotFound } from "./pages/NotFound";
 
@@ -80,6 +82,9 @@ export default function App() {
         path="/onboarding"
         element={user ? <Onboarding /> : <Navigate to="/auth" replace />}
       />
+
+      {/* Claim a tag after scanning it with the phone camera (handles its own sign-in) */}
+      <Route path="/claim/:token" element={<ClaimTag />} />
 
       {/* Public: opened when someone scans a QR tag */}
       <Route path="/scan/:token" element={<ScanPage />} />

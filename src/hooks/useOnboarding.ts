@@ -10,7 +10,7 @@
  *   contacts    POST /api/v1/profile/me/contacts   (+ DELETE .../:id)
  *   vehicles    POST /api/v1/profile/me/vehicles   (+ DELETE .../:id)
  *   photos      POST /api/v1/profile/me/vehicles/:id/images (max 5)  (+ DELETE .../:imageId)
- *   claim tag   POST /api/v1/qr-tags/claim
+ *   claim tag   POST /api/v1/qr-tags/claim/lookup + /claim/confirm (scan the tag)
  *   checkout    POST /api/v1/payments/payfast/checkout          (card + free trial)
  *   prepaid     POST /api/v1/payments/payfast/checkout-prepaid  (any method, no trial)
  *
@@ -27,7 +27,6 @@ import { resizeImage } from "../utils/resizeImage";
 import { uploadFile } from "../lib/uploadApi";
 import {
     ACTIVE_STATUSES,
-    type ClaimForm,
     type ContactForm,
     type VehicleForm,
 } from "../components/dashboard/dashboardConfig";
@@ -230,20 +229,6 @@ export function useOnboarding() {
             api(user!, `/api/v1/profile/me/vehicles/${id}`, { method: "DELETE" })
         );
 
-    const claimTag = (form: ClaimForm) =>
-        run(
-            () =>
-                api(user!, "/api/v1/qr-tags/claim", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        tag_ref: form.tag_ref.trim(),
-                        activation_code: form.activation_code.trim(),
-                        label: form.label.trim() || "SafeLink tag",
-                    }),
-                }),
-            "Tag claimed."
-        );
-
     /** Posts signed fields to PayFast with a hidden form (the browser leaves this page). */
     function submitToPayFast(processUrl: string, fields: Record<string, string>) {
         const form = document.createElement("form");
@@ -335,7 +320,7 @@ export function useOnboarding() {
         uploadVehicleImages,
         deleteVehicleImage,
         deleteVehicle,
-        claimTag,
+        refresh: () => load(false),
         beginCheckout,
         beginPrepaidCheckout,
     };
