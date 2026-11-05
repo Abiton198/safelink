@@ -4,6 +4,7 @@ type Props = {
     value: string; // "YYYY-MM-DD" or ""
     onChange: (iso: string) => void;
     required?: boolean;
+    autoFocus?: boolean;
 };
 
 const MONTHS = [
@@ -25,7 +26,7 @@ function toIso(d: string, m: string, y: string): string {
     return `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export default function DateOfBirthInput({ value, onChange, required }: Props) {
+export default function DateOfBirthInput({ value, onChange, required, autoFocus }: Props) {
     const [y0, m0, d0] = value ? value.split("-") : ["", "", ""];
     const [day, setDay] = useState(d0 ? String(Number(d0)) : "");
     const [month, setMonth] = useState(m0 ? String(Number(m0)) : "");
@@ -55,6 +56,8 @@ export default function DateOfBirthInput({ value, onChange, required }: Props) {
                     maxLength={2}
                     required={required}
                     value={day}
+                    autoFocus={autoFocus}
+                    autoComplete="off"
                     style={{ width: 64 }}
                     onChange={(e) => {
                         const d = e.target.value.replace(/\D/g, "").slice(0, 2);

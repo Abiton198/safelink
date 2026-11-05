@@ -59,6 +59,8 @@ export function StepProfile({ ob, onSaved }: Props) {
                     required
                     value={values.date_of_birth}
                     onChange={(iso) => set("date_of_birth", iso)}
+                    autoFocus
+
                 />
             </Field>
 

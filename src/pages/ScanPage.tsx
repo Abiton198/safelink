@@ -25,6 +25,7 @@ import "../styles/scan.css";
 import { Shell } from "../components/layout/Shell";
 import { Field } from "../components/ui/Field";
 import { Alert } from "../components/ui/Alert";
+import DateOfBirthInput from "../components/onboarding/DateOfBirthInput";
 
 /** The placeholder token used by the demo QR on the landing page. */
 const DEMO_TOKEN = "demo-tag-token-not-active";
@@ -33,6 +34,7 @@ export function ScanPage() {
   // The token comes from the address: /scan/<token>
   const { token = "" } = useParams();
 
+  // "YYYY-MM-DD" once the date is complete and valid, otherwise ""
   const [dob, setDob] = useState("");
   const [data, setData] = useState<EmergencyData | null>(null); // set after verification
   const [busy, setBusy] = useState(false);
@@ -93,6 +95,12 @@ export function ScanPage() {
   /** Verifies the date of birth and loads the emergency information. */
   async function verify(e: FormEvent) {
     e.preventDefault();
+
+    // Never send an incomplete or impossible date to the backend
+    if (!dob) {
+      setError("Please enter a complete, valid date of birth.");
+      return;
+    }
 
     setBusy(true);
     setError("");
@@ -172,22 +180,24 @@ export function ScanPage() {
             </p>
 
             <Field label="Owner's date of birth">
-              <input
-                type="date"
+              <DateOfBirthInput
                 required
+                autoFocus
                 value={dob}
-                onChange={(e) => setDob(e.target.value)}
+                onChange={setDob}
               />
             </Field>
 
             {error && <Alert type="error">{error}</Alert>}
             {notice && <Alert type="info">{notice}</Alert>}
 
-            {/* Disabled while busy, for the demo tag, or when the tag is not usable */}
+            {/* Disabled while busy, until the date is valid, for the demo tag,
+                or when the tag is not usable */}
             <button
               className="button primary full"
               disabled={
                 busy ||
+                !dob ||
                 !token ||
                 token === DEMO_TOKEN ||
                 tagState === "checking" ||
@@ -332,6 +342,7 @@ export function ScanPage() {
 
             {/* Closing wipes the private data from the screen */}
             <button
+              type="button"
               className="button secondary full"
               onClick={() => {
                 setData(null);
