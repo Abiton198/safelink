@@ -8,6 +8,8 @@
  *
  * Features
  *   - SKIP any optional step, or go BACK to change something.
+ *   - Details typed into a form but not yet added are SAVED when the person
+ *     presses Continue / Back / Save & exit (see FlushPending), never lost.
  *   - Everything is saved to the backend the moment the person presses a
  *     Save / Add button, so nothing is lost if they leave.
  *   - "Save & exit" leaves for the dashboard. The slide they were on is
@@ -22,7 +24,7 @@
  *   the slides       -> components/onboarding/Step*.tsx
  *   the colours      -> styles/onboarding.css
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/onboarding.css";
@@ -38,6 +40,7 @@ import { fetchRemoteProgress, saveRemoteProgress } from "../lib/onboardingApi";
 import { Alert } from "../components/ui/Alert";
 import {
     STEPS,
+    type FlushPending,
     type StepId,
 } from "../components/onboarding/onboardingConfig";
 import { StepWelcome } from "../components/onboarding/StepWelcome";
@@ -137,7 +140,21 @@ export function Onboarding() {
 
     /* ---------- Navigation ---------- */
 
-    function goTo(index: number) {
+    /**
+     * The slide on screen can register a function that saves anything typed but
+     * not yet added (see FlushPending). Leaving the slide always runs it first.
+     */
+    const flushRef = useRef<FlushPending | null>(null);
+
+    async function flushPending(): Promise<boolean> {
+        const flush = flushRef.current;
+        return flush ? await flush() : true;
+    }
+
+    async function goTo(index: number) {
+        // Stay on this slide if typed details could not be saved.
+        if (!(await flushPending())) return;
+
         const target = Math.min(Math.max(index, 0), STEPS.length - 1);
         setDirection(target >= step ? "forward" : "back");
         ob.clearMessages();
@@ -152,6 +169,8 @@ export function Onboarding() {
     const back = () => goTo(step - 1);
 
     function skip() {
+        // "Skip" means leave this slide as it is: typed-but-unsaved details are dropped.
+        flushRef.current = null;
         update({
             skipped: Array.from(new Set([...progress.skipped, current.id])),
         });
@@ -164,7 +183,8 @@ export function Onboarding() {
     }
 
     /** Leave now; the position is already saved. */
-    function saveAndExit() {
+    async function saveAndExit() {
+        if (!(await flushPending())) return;
         navigate("/dashboard");
     }
 
@@ -215,9 +235,9 @@ export function Onboarding() {
                     />
                 );
             case "contacts":
-                return <StepContacts ob={ob} />;
+                return <StepContacts ob={ob} registerFlush={(f) => { flushRef.current = f; }} />;
             case "vehicle":
-                return <StepVehicle ob={ob} />;
+                return <StepVehicle ob={ob} registerFlush={(f) => { flushRef.current = f; }} />;
             case "tag":
                 return <StepTag ob={ob} />;
             case "finish":

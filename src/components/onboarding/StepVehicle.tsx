@@ -3,9 +3,13 @@
  * ---------------------------------------------------------------------------
  * Slide 4: add a vehicle, its tracker and up to 5 photos (all optional).
  *
- * "Add vehicle" saves the vehicle first, then uploads the chosen photos to it.
- * Saved vehicles appear in the list above the form, where more photos can be
- * added or removed later (VehiclePhotos).
+ * Two ways to save, both end up in the same place:
+ *   1. The "＋ Add vehicle" button in the form (lets several be added in a row).
+ *   2. Just pressing the big "Continue" button (or Back / Save & exit) while the
+ *      form is filled in. The wizard calls `flush` below first, so what was
+ *      typed is saved instead of silently lost.
+ * A vehicle needs a name. If other details are typed but the name is empty,
+ * the person stays on the slide and is told why.
  *
  * Photos are shrunk in the browser (utils/resizeImage.ts) and checked again
  * by the backend, which enforces the limit of 5 per vehicle.
@@ -19,16 +23,30 @@ import {
 } from "../dashboard/dashboardConfig";
 import { Field } from "../ui/Field";
 import { VehiclePhotos } from "./VehiclePhotos";
+import type { RegisterFlush } from "./onboardingConfig";
 
-export function StepVehicle({ ob }: { ob: OnboardingApi }) {
+type Props = {
+    ob: OnboardingApi;
+    /** Lets the wizard save a half-finished form before leaving this slide. */
+    registerFlush: RegisterFlush;
+};
+
+export function StepVehicle({ ob, registerFlush }: Props) {
     const [form, setForm] = useState<VehicleForm>(EMPTY_VEHICLE_FORM);
 
     // Photos chosen for the vehicle being added (uploaded after it is saved)
     const [photos, setPhotos] = useState<File[]>([]);
     const [photoNote, setPhotoNote] = useState("");
+    const [formProblem, setFormProblem] = useState("");
 
-    const set = (key: keyof VehicleForm, value: string) =>
+    const set = (key: keyof VehicleForm, value: string) => {
+        setFormProblem("");
         setForm((current) => ({ ...current, [key]: value }));
+    };
+
+    // Has anything been typed or chosen that is not saved yet?
+    const dirty =
+        photos.length > 0 || Object.values(form).some((v) => v.trim() !== "");
 
     // Small previews of the chosen photos, released when no longer needed.
     const previews = useMemo(
@@ -56,18 +74,52 @@ export function StepVehicle({ ob }: { ob: OnboardingApi }) {
         setPhotos((current) => [...current, ...images.slice(0, room)]);
     }
 
-    async function submit(e: FormEvent) {
-        e.preventDefault();
-
-        const vehicleId = await ob.addVehicle(form);
-        if (!vehicleId) return; // the error is already shown
-
-        if (photos.length > 0) await ob.uploadVehicleImages(vehicleId, photos);
-
+    function clearForm() {
         setForm(EMPTY_VEHICLE_FORM);
         setPhotos([]);
         setPhotoNote("");
+        setFormProblem("");
     }
+
+    /** Saves the vehicle, then its photos. True if the vehicle was saved. */
+    async function saveVehicle(): Promise<boolean> {
+        const vehicleId = await ob.addVehicle(form);
+        if (!vehicleId) return false; // the error is already shown
+
+        if (photos.length > 0) await ob.uploadVehicleImages(vehicleId, photos);
+
+        clearForm();
+        return true;
+    }
+
+    /** The "＋ Add vehicle" button. */
+    async function submit(e: FormEvent) {
+        e.preventDefault();
+        await saveVehicle();
+    }
+
+    /**
+     * Called by the wizard before it leaves this slide. True = fine to leave.
+     * Saves a filled-in form; refuses to leave when it cannot (no name).
+     */
+    async function flush(): Promise<boolean> {
+        if (!dirty) return true;
+
+        if (!form.label.trim()) {
+            setFormProblem(
+                "Give this vehicle a name to save it, or press “Clear form” to leave it out."
+            );
+            return false;
+        }
+
+        return saveVehicle();
+    }
+
+    // Keep the wizard pointing at the CURRENT flush (it sees the latest form).
+    useEffect(() => {
+        registerFlush(flush);
+        return () => registerFlush(null);
+    });
 
     return (
         <>
@@ -202,6 +254,11 @@ export function StepVehicle({ ob }: { ob: OnboardingApi }) {
                 </div>
 
                 {photoNote && <p className="ob-photo-note">{photoNote}</p>}
+                {formProblem && (
+                    <p className="ob-photo-note" role="alert">
+                        {formProblem}
+                    </p>
+                )}
 
                 <button className="ob-btn accent" disabled={ob.busy}>
                     {ob.busy
@@ -210,6 +267,18 @@ export function StepVehicle({ ob }: { ob: OnboardingApi }) {
                             : "Saving…"
                         : "＋ Add vehicle"}
                 </button>
+
+                {dirty && (
+                    <>
+                        <p className="ob-hint">
+                            Not pressed “Add vehicle”? No problem: pressing Continue saves what
+                            you typed.
+                        </p>
+                        <button type="button" className="ob-link" onClick={clearForm}>
+                            Clear form
+                        </button>
+                    </>
+                )}
             </form>
         </>
     );

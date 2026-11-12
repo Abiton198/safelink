@@ -6,11 +6,11 @@
  * look the same everywhere.
  *
  * The navigation changes depending on whether someone is signed in:
- *   - Signed in  -> "Dashboard" link and a "Sign out" button
- *   - Signed out -> "Sign in" link
+ * Signed in  -> "Dashboard" link and a "Sign out" button
+ * Signed out -> "Sign in" link
  */
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth";
 
 type ShellProps = {
@@ -19,6 +19,16 @@ type ShellProps = {
 
 export function Shell({ children }: ShellProps) {
   const { user, logOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    try {
+      await logOut();
+      navigate("/");
+    } catch (err) {
+      console.error("Failed to log out:", err);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -35,13 +45,13 @@ export function Shell({ children }: ShellProps) {
           {user ? (
             <>
               <Link to="/dashboard">Dashboard</Link>
-              {/* `void` tells TypeScript we are deliberately not awaiting the promise */}
-              <button className="text-button" onClick={() => void logOut()}>
+              {/* Calls logOut and navigates back to the home page */}
+              <button className="text-button" onClick={() => void handleSignOut()}>
                 Sign out
               </button>
             </>
           ) : (
-            <Link to="/auth">Sign in</Link>
+            <Link to="/">Scan!</Link>
           )}
         </nav>
       </header>

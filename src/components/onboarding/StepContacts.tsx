@@ -4,28 +4,78 @@
  * Slide 3: add one or more emergency contacts.
  *
  * "Add contact" saves right away and the contact appears in the list above
- * the form, so several can be added in a row. The footer "Continue" button
- * simply moves to the next slide.
+ * the form, so several can be added in a row.
+ *
+ * If a contact has been typed in but "Add contact" was not pressed, pressing
+ * Continue (or Back / Save & exit) SAVES it first: the wizard calls `flush`
+ * below, so nothing typed is silently lost. A contact needs a name and a phone
+ * number; if one is missing the person stays on the slide and is told why.
  */
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { OnboardingApi } from "../../hooks/useOnboarding";
 import {
     EMPTY_CONTACT_FORM,
     type ContactForm,
 } from "../dashboard/dashboardConfig";
 import { Field } from "../ui/Field";
+import type { RegisterFlush } from "./onboardingConfig";
 
-export function StepContacts({ ob }: { ob: OnboardingApi }) {
+type Props = {
+    ob: OnboardingApi;
+    /** Lets the wizard save a half-finished form before leaving this slide. */
+    registerFlush: RegisterFlush;
+};
+
+export function StepContacts({ ob, registerFlush }: Props) {
     const [form, setForm] = useState<ContactForm>(EMPTY_CONTACT_FORM);
+    const [formProblem, setFormProblem] = useState("");
 
-    async function submit(e: FormEvent) {
-        e.preventDefault();
+    // Anything typed that is not saved yet? (the checkbox alone does not count)
+    const dirty = [form.name, form.phone, form.relationship, form.email].some(
+        (v) => v.trim() !== ""
+    );
+
+    function clearForm() {
+        setForm(EMPTY_CONTACT_FORM);
+        setFormProblem("");
+    }
+
+    /** Saves the contact. True if saved. */
+    async function saveContact(): Promise<boolean> {
         // Next free priority number (1 = called first, maximum 5)
         const priority = String(Math.min(5, ob.contacts.length + 1));
         if (await ob.addContact({ ...form, priority })) {
-            setForm(EMPTY_CONTACT_FORM);
+            clearForm();
+            return true;
         }
+        return false; // the error is already shown
     }
+
+    /** The "＋ Add contact" button. */
+    async function submit(e: FormEvent) {
+        e.preventDefault();
+        await saveContact();
+    }
+
+    /** Called by the wizard before it leaves this slide. True = fine to leave. */
+    async function flush(): Promise<boolean> {
+        if (!dirty) return true;
+
+        if (!form.name.trim() || !form.phone.trim()) {
+            setFormProblem(
+                "A contact needs a name and a phone number. Fill both in, or press “Clear form” to leave it out."
+            );
+            return false;
+        }
+
+        return saveContact();
+    }
+
+    // Keep the wizard pointing at the CURRENT flush (it sees the latest form).
+    useEffect(() => {
+        registerFlush(flush);
+        return () => registerFlush(null);
+    });
 
     return (
         <>
@@ -57,7 +107,7 @@ export function StepContacts({ ob }: { ob: OnboardingApi }) {
                         required
                         maxLength={100}
                         value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        onChange={(e) => { setFormProblem(""); setForm({ ...form, name: e.target.value }); }}
                     />
                 </Field>
 
@@ -68,7 +118,7 @@ export function StepContacts({ ob }: { ob: OnboardingApi }) {
                         maxLength={30}
                         autoComplete="off"
                         value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        onChange={(e) => { setFormProblem(""); setForm({ ...form, phone: e.target.value }); }}
                     />
                 </Field>
 
@@ -92,9 +142,27 @@ export function StepContacts({ ob }: { ob: OnboardingApi }) {
                     Show to verified responders
                 </label>
 
+                {formProblem && (
+                    <p className="ob-photo-note" role="alert">
+                        {formProblem}
+                    </p>
+                )}
+
                 <button className="ob-btn accent" disabled={ob.busy}>
                     {ob.busy ? "Saving…" : "＋ Add contact"}
                 </button>
+
+                {dirty && (
+                    <>
+                        <p className="ob-hint">
+                            Not pressed “Add contact”? No problem: pressing Continue saves what
+                            you typed.
+                        </p>
+                        <button type="button" className="ob-link" onClick={clearForm}>
+                            Clear form
+                        </button>
+                    </>
+                )}
             </form>
         </>
     );

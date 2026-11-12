@@ -68,3 +68,27 @@ export const STEPS: StepConfig[] = [
         skippable: false,
     },
 ];
+
+/**
+ * Monthly price in rand, used ONLY to display prepaid prices on the finish
+ * slide. The backend signs the real amount (SUBSCRIPTION_MONTHLY_AMOUNT), so
+ * keep this in step with that setting.
+ */
+export const PLAN_MONTHLY_ZAR = 19.99;
+
+/** Lengths of prepaid access the backend accepts. */
+export const PREPAID_MONTHS = [1, 3, 12] as const;
+
+/**
+ * "Save whatever is typed in" hook-up between a slide and the wizard.
+ *
+ * A slide with an add-form (contacts, vehicle) gives the wizard a function.
+ * Before the wizard leaves the slide (Continue, Back, the progress dots,
+ * Save & exit) it calls it, so details that were typed but never added with the
+ * form's own button are SAVED instead of silently lost.
+ *
+ * The function resolves to true when it is fine to leave (nothing typed, or it
+ * saved), and false when the person must stay (for example a name is missing).
+ */
+export type FlushPending = () => Promise<boolean>;
+export type RegisterFlush = (flush: FlushPending | null) => void;

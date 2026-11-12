@@ -4,7 +4,7 @@
  * The home page (route: "/"), built like an emergency screen:
  * one fixed screen, no scrolling, two big buttons.
  *
- *   1. SCAN TAG        -> opens the camera (ScanCamera). When a SafeLink QR
+ * SCAN TAG        -> opens the camera (ScanCamera). When a SafeLink QR
  *                         code is read, the person goes to /scan/<token> and
  *                         is asked only for the owner's date of birth.
  *   2. SIGN IN GOOGLE  -> one tap, no password. New users get an account
@@ -54,7 +54,32 @@ export function Landing() {
   }
 
   return (
-    <main className="emergency-home">
+    <main className="emergency-home" style={{ position: "relative" }}>
+      {/* ---------- Close / Exit Button ---------- */}
+      <button
+        type="button"
+        className="close-button"
+        onClick={() => navigate(-1)} // or navigate("/dashboard") or wherever appropriate
+        aria-label="Close"
+        style={{
+          position: "absolute",
+          top: "1.5rem",
+          right: "1.5rem",
+          background: "transparent",
+          border: "none",
+          color: "currentColor",
+          fontSize: "1.5rem",
+          cursor: "pointer",
+          padding: "0.5rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10,
+        }}
+      >
+        ✕
+      </button>
+
       <div className="emergency-home-inner">
         <div className="brand-mark">S</div>
         <h1>SafeLink</h1>
