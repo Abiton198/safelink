@@ -3,16 +3,6 @@
  * ---------------------------------------------------------------------------
  * The PUBLIC page that opens when someone scans a SafeLink QR code
  * (route: "/scan/:token"). No sign-in is needed.
- *
- * Flow:
- *   1. On load, ask the backend if the tag is activated (status only, no
- *      personal data).
- *   2. The person scanning enters the owner's date of birth.
- *   3. The backend verifies it and returns a short-lived access token.
- *   4. We use that token to fetch ONLY the information the owner chose to share
- *      and display it.
- *
- * A scan alone reveals nothing personal.
  */
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -27,38 +17,59 @@ import { Field } from "../components/ui/Field";
 import { Alert } from "../components/ui/Alert";
 import DateOfBirthInput from "../components/onboarding/DateOfBirthInput";
 
-/** The placeholder token used by the demo QR on the landing page. */
 const DEMO_TOKEN = "demo-tag-token-not-active";
 
+/** Optional trial fields returned by the backend on EmergencyData */
+type EmergencyDataWithTrial = EmergencyData & {
+  is_trial?: boolean;
+  trial_ends_at?: string | null;
+  trial_days_remaining?: number;
+};
+
+/** Helper to format a live countdown string from an ISO target timestamp */
+function formatCountdown(targetIso: string, nowMs: number): string {
+  const diff = new Date(targetIso).getTime() - nowMs;
+  if (diff <= 0) return "0d 0h 0m 0s";
+
+  const totalSeconds = Math.floor(diff / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
 export function ScanPage() {
-  // The token comes from the address: /scan/<token>
   const { token = "" } = useParams();
 
-  // "YYYY-MM-DD" once the date is complete and valid, otherwise ""
   const [dob, setDob] = useState("");
-  const [data, setData] = useState<EmergencyData | null>(null); // set after verification
+  const [data, setData] = useState<EmergencyDataWithTrial | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  /**
-   * What we know about the tag:
-   *   checking      - status request is running
-   *   ready         - tag is activated, verification can proceed
-   *   not_activated - tag is not claimed/active (or is the demo tag)
-   *   unknown       - status lookup failed; let the verify call decide
-   */
+  // Tracks whether the user clicked "Noted & continue with full access"
+  // Resets every time the service is used so it always prompts during trial.
+  const [trialNoted, setTrialNoted] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
   const [tagState, setTagState] = useState<
     "checking" | "ready" | "not_activated" | "unknown"
   >("checking");
 
-  /*
-   * This status endpoint must return status only—never personal information.
-   * The DOB verification endpoint remains the authority for access.
-   */
+  // Live 1-second ticker for the trial countdown
   useEffect(() => {
-    // `cancelled` stops us updating state if the user leaves the page
-    // before the request finishes.
+    if (!data?.is_trial || !data?.trial_ends_at || trialNoted) return;
+
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [data?.is_trial, data?.trial_ends_at, trialNoted]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function checkTag() {
@@ -71,7 +82,7 @@ export function ScanPage() {
 
       try {
         const result = await api<{ state?: string }>(
-          null, // public endpoint: no signed-in user
+          null,
           `/api/v1/public/qr/${encodeURIComponent(token)}/status`
         );
 
@@ -79,8 +90,6 @@ export function ScanPage() {
 
         setTagState(result.state === "ready" ? "ready" : "not_activated");
       } catch {
-        // If status lookup is unavailable, still allow the verify request
-        // to give the backend's authoritative response.
         if (!cancelled) setTagState("unknown");
       }
     }
@@ -96,7 +105,6 @@ export function ScanPage() {
   async function verify(e: FormEvent) {
     e.preventDefault();
 
-    // Never send an incomplete or impossible date to the backend
     if (!dob) {
       setError("Please enter a complete, valid date of birth.");
       return;
@@ -106,9 +114,9 @@ export function ScanPage() {
     setError("");
     setNotice("");
     setData(null);
+    setTrialNoted(false);
 
     try {
-      // Step 1: exchange the date of birth for a short-lived access token
       const result = await api<{
         access_token: string;
         expires_in_seconds: number;
@@ -119,14 +127,14 @@ export function ScanPage() {
 
       setNotice("Verification successful. Loading permitted information…");
 
-      // Step 2: use that token to fetch the information the owner shares
-      const details = await api<EmergencyData>(
+      const details = await api<EmergencyDataWithTrial>(
         null,
         `/api/v1/public/emergency?access_token=${encodeURIComponent(
           result.access_token
         )}`
       );
 
+      setNowMs(Date.now());
       setData(details);
     } catch (err) {
       setError(messageOf(err));
@@ -134,6 +142,8 @@ export function ScanPage() {
       setBusy(false);
     }
   }
+
+  const showTrialGate = Boolean(data?.is_trial && data?.trial_ends_at && !trialNoted);
 
   return (
     <Shell>
@@ -163,7 +173,6 @@ export function ScanPage() {
               </Alert>
             )}
 
-            {/* An unclaimed tag: let its owner claim it right here */}
             {tagState === "not_activated" && token && token !== DEMO_TOKEN && (
               <Link
                 className="button secondary full"
@@ -191,8 +200,6 @@ export function ScanPage() {
             {error && <Alert type="error">{error}</Alert>}
             {notice && <Alert type="info">{notice}</Alert>}
 
-            {/* Disabled while busy, until the date is valid, for the demo tag,
-                or when the tag is not usable */}
             <button
               className="button primary full"
               disabled={
@@ -212,8 +219,55 @@ export function ScanPage() {
               contact local emergency services.
             </p>
           </form>
+        ) : showTrialGate && data.trial_ends_at ? (
+          /* ================= TRIAL COUNTDOWN NOTICE ================= */
+          <div className="panel scan-panel">
+            <div className="eyebrow">FREE TRIAL ACTIVE</div>
+            <h1>Subscription countdown</h1>
+
+            <p className="muted">
+              This SafeLink account is currently operating on a free trial with
+              full access. A subscription will be required once the trial period
+              ends.
+            </p>
+
+            <Alert type="info">
+              <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
+                <div style={{ fontSize: "0.85rem", opacity: 0.85 }}>
+                  Time remaining until subscription date (
+                  {new Date(data.trial_ends_at).toLocaleDateString()}):
+                </div>
+                <strong
+                  style={{
+                    display: "block",
+                    fontSize: "1.5rem",
+                    marginTop: "0.35rem",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {formatCountdown(data.trial_ends_at, nowMs)}
+                </strong>
+              </div>
+            </Alert>
+
+            <button
+              type="button"
+              className="button primary full"
+              onClick={() => setTrialNoted(true)}
+            >
+              Noted and continue with full access
+            </button>
+
+            <p className="fine-print">
+              Are you the owner?{" "}
+              <Link className="inline-link" to="/auth">
+                Sign in to manage your subscription
+              </Link>
+              .
+            </p>
+          </div>
         ) : (
-          /* ================= AFTER verification ================= */
+          /* ================= AFTER verification & trial noted ================= */
           <div className="panel emergency-panel">
             <div className="emergency-banner">
               <span>✓</span>
@@ -226,7 +280,6 @@ export function ScanPage() {
               </div>
             </div>
 
-            {/* Owner's name with an initial avatar */}
             <div className="emergency-person">
               <div className="person-avatar">
                 {data.profile.display_name?.slice(0, 1).toUpperCase() || "S"}
@@ -251,7 +304,6 @@ export function ScanPage() {
               </section>
             )}
 
-            {/* Contacts: each has a tap-to-call button */}
             <section className="emergency-section">
               <h2>Emergency contacts</h2>
 
@@ -268,7 +320,6 @@ export function ScanPage() {
                       </small>
                     </div>
 
-                    {/* Strip everything except digits and "+" so tel: links work */}
                     <a
                       className="button primary small"
                       href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}
@@ -282,7 +333,6 @@ export function ScanPage() {
               )}
             </section>
 
-            {/* Vehicles and trackers */}
             <section className="emergency-section">
               <h2>Vehicles & trackers</h2>
 
@@ -314,7 +364,6 @@ export function ScanPage() {
 
                     {vehicle.notes && <p>{vehicle.notes}</p>}
 
-                    {/* Photos: tap one to open it full size in a new tab */}
                     {scanPhotosOf(vehicle).length > 0 && (
                       <div className="scan-photos">
                         {scanPhotosOf(vehicle).map((url, photoIndex) => (
@@ -340,7 +389,6 @@ export function ScanPage() {
               )}
             </section>
 
-            {/* Closing wipes the private data from the screen */}
             <button
               type="button"
               className="button secondary full"
@@ -349,13 +397,12 @@ export function ScanPage() {
                 setDob("");
                 setNotice("");
                 setError("");
+                setTrialNoted(false);
               }}
             >
               Close emergency view
             </button>
 
-            {/* Owners: viewing needs only the date of birth, but EDITING needs
-                a real sign-in, because a date of birth is not a strong secret. */}
             <p className="fine-print">
               Are you the owner and want to change these details?{" "}
               <Link className="inline-link" to="/auth">

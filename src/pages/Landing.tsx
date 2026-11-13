@@ -77,7 +77,7 @@ export function Landing() {
           zIndex: 10,
         }}
       >
-        ✕
+
       </button>
 
       <div className="emergency-home-inner">
