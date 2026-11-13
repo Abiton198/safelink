@@ -15,18 +15,24 @@ import "../styles/scan.css";
 import { Shell } from "../components/layout/Shell";
 import { Field } from "../components/ui/Field";
 import { Alert } from "../components/ui/Alert";
-import DateOfBirthInput from "../components/onboarding/DateOfBirthInput";
 
 const DEMO_TOKEN = "demo-tag-token-not-active";
 
-/** Optional trial fields returned by the backend on EmergencyData */
-type EmergencyDataWithTrial = EmergencyData & {
+type MaskedContact = {
+  name: string;
+  relationship: string;
+  priority: number;
+  phone?: string;
+  phone_masked?: string;
+};
+
+type EmergencyDataWithTrial = Omit<EmergencyData, "emergency_contacts"> & {
+  emergency_contacts: MaskedContact[];
   is_trial?: boolean;
   trial_ends_at?: string | null;
   trial_days_remaining?: number;
 };
 
-/** Helper to format a live countdown string from an ISO target timestamp */
 function formatCountdown(targetIso: string, nowMs: number): string {
   const diff = new Date(targetIso).getTime() - nowMs;
   if (diff <= 0) return "0d 0h 0m 0s";
@@ -40,25 +46,52 @@ function formatCountdown(targetIso: string, nowMs: number): string {
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 }
 
+/** Converts 8 digits (DDMMYYYY) into YYYY-MM-DD format for backend */
+function parseDobToIso(digits: string): string {
+  if (digits.length !== 8) return "";
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+  return `${year}-${month}-${day}`;
+}
+
 export function ScanPage() {
   const { token = "" } = useParams();
 
-  const [dob, setDob] = useState("");
+  // Masked numeric DOB input (DDMMYYYY -> converted to YYYY-MM-DD for backend)
+  const [dobDigits, setDobDigits] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [data, setData] = useState<EmergencyDataWithTrial | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  // Tracks whether the user clicked "Noted & continue with full access"
-  // Resets every time the service is used so it always prompts during trial.
+  // Trial countdown gate state
   const [trialNoted, setTrialNoted] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+
+  // Priority message composer state
+  const [messageBoxOpen, setMessageBoxOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [sendingAlert, setSendingAlert] = useState(false);
+  const [alertFeedback, setAlertFeedback] = useState<{
+    type: "info" | "error";
+    text: string;
+  } | null>(null);
+
+  // Masked passcode state to reveal phone numbers
+  const [revealPromptOpen, setRevealPromptOpen] = useState(false);
+  const [unlockDobDigits, setUnlockDobDigits] = useState("");
+  const [unlockingNumbers, setUnlockingNumbers] = useState(false);
+  const [revealError, setRevealError] = useState("");
+  const [revealedNumbers, setRevealedNumbers] = useState<Record<string, string>>(
+    {}
+  );
 
   const [tagState, setTagState] = useState<
     "checking" | "ready" | "not_activated" | "unknown"
   >("checking");
 
-  // Live 1-second ticker for the trial countdown
   useEffect(() => {
     if (!data?.is_trial || !data?.trial_ends_at || trialNoted) return;
 
@@ -101,20 +134,25 @@ export function ScanPage() {
     };
   }, [token]);
 
-  /** Verifies the date of birth and loads the emergency information. */
+  /** Verifies the masked date of birth and loads emergency information. */
   async function verify(e: FormEvent) {
     e.preventDefault();
 
-    if (!dob) {
-      setError("Please enter a complete, valid date of birth.");
+    if (dobDigits.length !== 8) {
+      setError("Please enter a complete 8-digit date of birth (DDMMYYYY).");
       return;
     }
 
+    const isoDob = parseDobToIso(dobDigits);
     setBusy(true);
     setError("");
     setNotice("");
     setData(null);
     setTrialNoted(false);
+    setRevealedNumbers({});
+    setRevealPromptOpen(false);
+    setMessageBoxOpen(false);
+    setAlertFeedback(null);
 
     try {
       const result = await api<{
@@ -122,9 +160,10 @@ export function ScanPage() {
         expires_in_seconds: number;
       }>(null, `/api/v1/public/qr/${encodeURIComponent(token)}/verify`, {
         method: "POST",
-        body: JSON.stringify({ date_of_birth: dob }),
+        body: JSON.stringify({ date_of_birth: isoDob }),
       });
 
+      setAccessToken(result.access_token);
       setNotice("Verification successful. Loading permitted information…");
 
       const details = await api<EmergencyDataWithTrial>(
@@ -143,7 +182,99 @@ export function ScanPage() {
     }
   }
 
-  const showTrialGate = Boolean(data?.is_trial && data?.trial_ends_at && !trialNoted);
+  /** Sends an emergency alert message to saved priority contacts without revealing numbers. */
+  async function handleSendPriorityAlert(e: FormEvent) {
+    e.preventDefault();
+    if (!alertMessage.trim() || !accessToken) return;
+
+    setSendingAlert(true);
+    setAlertFeedback(null);
+
+    try {
+      const res = await api<{ detail?: string; alerted_count?: number }>(
+        null,
+        "/api/v1/public/emergency/alert-contacts",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            access_token: accessToken,
+            message: alertMessage.trim(),
+          }),
+        }
+      );
+
+      setAlertFeedback({
+        type: "info",
+        text:
+          res.detail ||
+          "Alert triggered and message sent to saved priority contacts.",
+      });
+      setAlertMessage("");
+      setMessageBoxOpen(false);
+    } catch (err) {
+      setAlertFeedback({
+        type: "error",
+        text: messageOf(err),
+      });
+    } finally {
+      setSendingAlert(false);
+    }
+  }
+
+  /** Verifies the masked DOB passcode to unlock and show phone numbers. */
+  async function handleRevealNumbers(e: FormEvent) {
+    e.preventDefault();
+    if (unlockDobDigits.length !== 8) {
+      setRevealError("Please enter the complete 8-digit passcode (DDMMYYYY).");
+      return;
+    }
+
+    setUnlockingNumbers(true);
+    setRevealError("");
+
+    try {
+      const res = await api<{ numbers: Record<string, string> }>(
+        null,
+        "/api/v1/public/emergency/reveal-numbers",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            access_token: accessToken,
+            date_of_birth: parseDobToIso(unlockDobDigits),
+          }),
+        }
+      );
+
+      setRevealedNumbers(res.numbers || {});
+      setRevealPromptOpen(false);
+      setUnlockDobDigits("");
+    } catch (err) {
+      setRevealError(messageOf(err));
+    } finally {
+      setUnlockingNumbers(false);
+    }
+  }
+
+  function resetAll() {
+    setData(null);
+    setAccessToken("");
+    setDobDigits("");
+    setNotice("");
+    setError("");
+    setTrialNoted(false);
+    setMessageBoxOpen(false);
+    setAlertMessage("");
+    setAlertFeedback(null);
+    setRevealPromptOpen(false);
+    setUnlockDobDigits("");
+    setRevealError("");
+    setRevealedNumbers({});
+  }
+
+  const showTrialGate = Boolean(
+    data?.is_trial && data?.trial_ends_at && !trialNoted
+  );
+  const numbersUnlocked = Object.keys(revealedNumbers).length > 0;
 
   return (
     <Shell>
@@ -183,18 +314,37 @@ export function ScanPage() {
             )}
 
             <p className="muted">
-              A scan alone does not display personal information. If the tag
-              is active, enter the owner's date of birth to request access to
-              the limited emergency information they chose to share.
+              A scan alone does not display personal information. Enter the
+              owner's date of birth below to request access.
             </p>
 
+            {/* Masked Password-style Date of Birth Input with Format Example */}
             <Field label="Owner's date of birth">
-              <DateOfBirthInput
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={8}
                 required
                 autoFocus
-                value={dob}
-                onChange={setDob}
+                placeholder="DDMMYYYY (e.g. 12052010)"
+                value={dobDigits}
+                onChange={(e) =>
+                  setDobDigits(e.target.value.replace(/\D/g, "").slice(0, 8))
+                }
+                style={{
+                  width: "100%",
+                  letterSpacing: "0.2em",
+                  fontFamily: "monospace",
+                }}
               />
+              <small
+                className="muted"
+                style={{ display: "block", marginTop: "0.25rem" }}
+              >
+                Format example: <b>12052010</b> (DDMMYYYY — numbers only,
+                hidden on screen)
+              </small>
             </Field>
 
             {error && <Alert type="error">{error}</Alert>}
@@ -204,7 +354,7 @@ export function ScanPage() {
               className="button primary full"
               disabled={
                 busy ||
-                !dob ||
+                dobDigits.length !== 8 ||
                 !token ||
                 token === DEMO_TOKEN ||
                 tagState === "checking" ||
@@ -304,35 +454,226 @@ export function ScanPage() {
               </section>
             )}
 
+            {/* ================= PRIORITY CONTACTS & PASSCODE CONTROLS ================= */}
             <section className="emergency-section">
               <h2>Emergency contacts</h2>
 
               {data.emergency_contacts.length ? (
-                data.emergency_contacts.map((contact, index) => (
+                <>
                   <div
-                    className="emergency-record"
-                    key={`${contact.phone}-${index}`}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.6rem",
+                      marginBottom: "1rem",
+                    }}
                   >
-                    <div>
-                      <strong>{contact.name}</strong>
-                      <small>
-                        {contact.relationship} · Priority {contact.priority}
-                      </small>
-                    </div>
-
-                    <a
-                      className="button primary small"
-                      href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`}
+                    <button
+                      type="button"
+                      className="button primary full"
+                      onClick={() => {
+                        setMessageBoxOpen((prev) => !prev);
+                        setAlertFeedback(null);
+                      }}
                     >
-                      Call {contact.name.split(" ")[0]}
-                    </a>
+                      ✉️ Send message to priority contacts
+                    </button>
+
+                    {!numbersUnlocked && (
+                      <button
+                        type="button"
+                        className="button secondary full"
+                        onClick={() => {
+                          setRevealPromptOpen((prev) => !prev);
+                          setRevealError("");
+                        }}
+                      >
+                        🔒 View phone numbers (requires passcode)
+                      </button>
+                    )}
                   </div>
-                ))
+
+                  {alertFeedback && (
+                    <Alert type={alertFeedback.type}>{alertFeedback.text}</Alert>
+                  )}
+
+                  {/* Message Composer Box */}
+                  {messageBoxOpen && (
+                    <form
+                      onSubmit={handleSendPriorityAlert}
+                      style={{
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        borderRadius: "10px",
+                        padding: "0.9rem",
+                        marginBottom: "1rem",
+                      }}
+                    >
+                      <Field label="Emergency message to send to saved priority contacts">
+                        <textarea
+                          rows={3}
+                          required
+                          maxLength={480}
+                          placeholder="Describe the situation, location, and how contacts can reach you…"
+                          value={alertMessage}
+                          onChange={(e) => setAlertMessage(e.target.value)}
+                          style={{ width: "100%", resize: "vertical" }}
+                        />
+                      </Field>
+                      <p className="fine-print" style={{ marginTop: "0.35rem" }}>
+                        Phone numbers remain hidden. Clicking send will
+                        dispatch an immediate alert to all priority contacts.
+                      </p>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          marginTop: "0.65rem",
+                        }}
+                      >
+                        <button
+                          type="submit"
+                          className="button primary"
+                          disabled={sendingAlert || !alertMessage.trim()}
+                        >
+                          {sendingAlert
+                            ? "Sending alert…"
+                            : "Send & trigger alert"}
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => setMessageBoxOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Masked Passcode Box to Reveal Numbers */}
+                  {revealPromptOpen && !numbersUnlocked && (
+                    <form
+                      onSubmit={handleRevealNumbers}
+                      style={{
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        borderRadius: "10px",
+                        padding: "0.9rem",
+                        marginBottom: "1rem",
+                      }}
+                    >
+                      <Field label="Re-enter owner's date of birth passcode to view numbers">
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={8}
+                          placeholder="DDMMYYYY (e.g. 12052010)"
+                          required
+                          value={unlockDobDigits}
+                          onChange={(e) =>
+                            setUnlockDobDigits(
+                              e.target.value.replace(/\D/g, "").slice(0, 8)
+                            )
+                          }
+                          style={{
+                            width: "100%",
+                            letterSpacing: "0.2em",
+                            fontFamily: "monospace",
+                          }}
+                        />
+                        <small
+                          className="muted"
+                          style={{ display: "block", marginTop: "0.25rem" }}
+                        >
+                          Format example: <b>12052010</b> (DDMMYYYY — numbers
+                          only, hidden on screen)
+                        </small>
+                      </Field>
+                      {revealError && <Alert type="error">{revealError}</Alert>}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          marginTop: "0.65rem",
+                        }}
+                      >
+                        <button
+                          type="submit"
+                          className="button primary"
+                          disabled={
+                            unlockingNumbers || unlockDobDigits.length !== 8
+                          }
+                        >
+                          {unlockingNumbers ? "Checking…" : "Unlock numbers"}
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => setRevealPromptOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Contact List */}
+                  {data.emergency_contacts.map((contact, index) => {
+                    const unlockedPhone =
+                      revealedNumbers[String(index)] || contact.phone;
+
+                    return (
+                      <div
+                        className="emergency-record"
+                        key={`${contact.name}-${index}`}
+                      >
+                        <div>
+                          <strong>{contact.name}</strong>
+                          <small>
+                            {contact.relationship} · Priority {contact.priority}
+                          </small>
+                          <div
+                            style={{ fontSize: "0.85rem", marginTop: "0.2rem" }}
+                          >
+                            {unlockedPhone ? (
+                              <span>{unlockedPhone}</span>
+                            ) : (
+                              <span className="muted">
+                                {contact.phone_masked || "Number hidden"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {unlockedPhone ? (
+                          <a
+                            className="button primary small"
+                            href={`tel:${unlockedPhone.replace(/[^+\d]/g, "")}`}
+                          >
+                            Call {contact.name.split(" ")[0]}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            onClick={() => {
+                              setRevealPromptOpen(true);
+                              setRevealError("");
+                            }}
+                          >
+                            Unlock to call
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
               ) : (
                 <p className="muted">No contacts have been shared.</p>
               )}
             </section>
 
+            {/* Vehicles and trackers */}
             <section className="emergency-section">
               <h2>Vehicles & trackers</h2>
 
@@ -392,13 +733,7 @@ export function ScanPage() {
             <button
               type="button"
               className="button secondary full"
-              onClick={() => {
-                setData(null);
-                setDob("");
-                setNotice("");
-                setError("");
-                setTrialNoted(false);
-              }}
+              onClick={resetAll}
             >
               Close emergency view
             </button>
